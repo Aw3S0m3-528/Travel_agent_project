@@ -15,6 +15,7 @@ REQUIRED_GUIDE_KEYWORDS = [
     "餐饮",
     "住宿",
     "注意事项",
+    "资料来源",
 ]
 
 
@@ -51,6 +52,7 @@ def build_review_scores(state, warnings, suggestions):
     route_segments = state.get("route_segments", {})
     rag_sources = state.get("rag_sources", [])
     online_sources = state.get("online_sources", [])
+    retrieval_quality = state.get("retrieval_quality", {})
     images = state.get("images", {})
     selected_pois = state.get("selected_pois", [])
     budget_plan = state.get("budget_plan", {})
@@ -78,6 +80,10 @@ def build_review_scores(state, warnings, suggestions):
         credibility += 8
     if online_sources:
         credibility += 10
+    if retrieval_quality.get("high_score_source_count", 0):
+        credibility += min(10, retrieval_quality.get("high_score_source_count", 0) * 2)
+    if retrieval_quality.get("has_dynamic_info"):
+        credibility += 5
     if not rag_sources and not online_sources:
         credibility -= 20
     if selected_pois and len(images) < len(selected_pois):
@@ -121,6 +127,8 @@ def validator_agent(state: TravelState) -> TravelState:
     time_plan = state.get("time_plan", {})
     rag_sources = state.get("rag_sources", [])
     online_sources = state.get("online_sources", [])
+    source_summary = state.get("source_summary", [])
+    retrieval_quality = state.get("retrieval_quality", {})
     rag_context = state.get("rag_context", "")
     poi_locations = state.get("poi_locations", {})
     route_segments = state.get("route_segments", {})
@@ -197,6 +205,16 @@ def validator_agent(state: TravelState) -> TravelState:
         passed.append(f"联网检索命中 {len(online_sources)} 条近两年相关资料。")
     else:
         suggestions.append("未命中联网资料或联网检索失败，动态信息仍需出行前再次确认。")
+
+    if source_summary:
+        passed.append(f"已生成 {len(source_summary)} 条资料来源摘要，并按相关性评分排序。")
+    else:
+        suggestions.append("未生成资料来源摘要，建议检查 Retrieval Agent 的 source_summary 输出。")
+
+    if retrieval_quality.get("has_dynamic_info"):
+        passed.append("检索结果包含开放时间、门票、预约或公告等动态旅游信息。")
+    else:
+        suggestions.append("动态旅游信息覆盖不足，开放时间和门票规则仍需出行前确认官方公告。")
 
     route_segment_count = sum(len(items) for items in route_segments.values()) if route_segments else 0
     location_count = sum(len(items) for items in poi_locations.values()) if poi_locations else 0

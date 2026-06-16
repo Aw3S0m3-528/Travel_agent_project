@@ -29,6 +29,8 @@ class TravelState(TypedDict, total=False):
     rag_context: str
     rag_sources: List[Dict[str, Any]]
     online_sources: List[Dict[str, Any]]
+    source_summary: List[Dict[str, Any]]
+    retrieval_quality: Dict[str, Any]
 
     images: Dict[str, str]
     image_sources: Dict[str, Any]

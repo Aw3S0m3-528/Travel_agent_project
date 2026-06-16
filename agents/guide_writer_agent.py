@@ -4,6 +4,42 @@ from tools.llm_tool import llm_available, call_llm
 from tools.prompt_tool import load_prompt
 
 
+def build_source_section(state: TravelState) -> str:
+    source_summary = state.get("source_summary", [])
+    retrieval_quality = state.get("retrieval_quality", {})
+
+    lines = ["## 六、资料来源与新鲜度说明\n"]
+
+    if retrieval_quality:
+        lines.append(
+            f"- 本地资料命中：{retrieval_quality.get('local_source_count', 0)} 条；"
+            f"联网资料命中：{retrieval_quality.get('online_source_count', 0)} 条；"
+            f"高相关来源：{retrieval_quality.get('high_score_source_count', 0)} 条。"
+        )
+        lines.append(f"- 新鲜度说明：{retrieval_quality.get('freshness_note', '建议出行前再次确认官方公告。')}")
+    else:
+        lines.append("- 当前未生成结构化资料来源摘要，建议出行前再次确认官方公告。")
+
+    lines.append("- 对开放时间、门票、预约、闭园通知、交通管制等动态信息，请以景区或官方平台最新公告为准。\n")
+
+    if not source_summary:
+        lines.append("暂无可展示的结构化资料来源。")
+        return "\n".join(lines)
+
+    lines.append("| 类型 | 来源/标题 | 评分 | 评分理由 |")
+    lines.append("|---|---|---:|---|")
+
+    for item in source_summary:
+        source_type = "本地知识库" if item.get("type") == "local_rag" else "联网资料"
+        title = item.get("title", "") or item.get("source", "资料来源")
+        url = item.get("url", "")
+        title_text = f"[{title}]({url})" if url else title
+        reasons = "、".join(item.get("score_reasons", [])) or "未标注"
+        lines.append(f"| {source_type} | {title_text} | {item.get('score', 0)} | {reasons} |")
+
+    return "\n".join(lines)
+
+
 def build_poi_summary(
     poi: str,
     destination: str,
@@ -208,6 +244,8 @@ def build_rule_guide(state: TravelState) -> str:
         guide.append("3. 当前未获得地图路线段，交通时间为基础估算，建议出行前用地图 App 再次确认。")
     guide.append("4. 图片优先来自 Wikimedia Commons；若未命中，会使用 DuckDuckGo/Bing 图片搜索结果爬取相关图片。当前仅用于学习演示，正式发布前需要逐张确认授权、作者和来源。")
     guide.append("5. 后续版本可继续增强预算计算、历史行程保存、重新规划和真实图片检索能力。")
+    guide.append("")
+    guide.append(build_source_section(state))
 
     return "\n".join(guide)
 
@@ -274,6 +312,8 @@ def llm_guide_generate(state: TravelState, draft_guide: str) -> str:
         "rag_context": state.get("rag_context", ""),
         "rag_sources": state.get("rag_sources", []),
         "online_sources": state.get("online_sources", []),
+        "source_summary": state.get("source_summary", []),
+        "retrieval_quality": state.get("retrieval_quality", {}),
         "images": state.get("images", {}),
         "image_sources": state.get("image_sources", {}),
         "poi_locations": state.get("poi_locations", {}),

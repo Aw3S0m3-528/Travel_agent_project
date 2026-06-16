@@ -3,8 +3,12 @@ from tools.rag_tool import retrieve_travel_info, format_rag_results
 from tools.web_search_tool import (
     build_recent_travel_query,
     format_online_results,
+    rank_search_results,
     search_recent_travel_web,
 )
+
+
+LOCAL_FACT_KEYWORDS = ["开放时间", "门票", "预约", "交通", "住宿", "路线", "美食"]
 
 
 POI_FACTS = {
@@ -148,6 +152,85 @@ def build_poi_info(poi: str, rag_results):
     return base_info
 
 
+def score_local_rag_results(rag_results, destination: str):
+    scored_results = []
+
+    for item in rag_results:
+        content = item.get("content", "")
+        metadata = item.get("metadata", {})
+        score = int(item.get("score", 0) or 0)
+        reasons = []
+
+        if metadata.get("city") == destination:
+            score += 20
+            reasons.append("匹配目的地本地资料")
+
+        matched_keywords = [keyword for keyword in LOCAL_FACT_KEYWORDS if keyword in content]
+        if matched_keywords:
+            score += min(21, len(matched_keywords) * 7)
+            reasons.append("包含结构化旅游信息：" + "、".join(matched_keywords[:3]))
+
+        scored_results.append({
+            **item,
+            "score": score,
+            "score_reasons": reasons or ["本地知识库资料"],
+        })
+
+    return sorted(scored_results, key=lambda current: current.get("score", 0), reverse=True)
+
+
+def build_source_summary(rag_sources, online_sources, limit: int = 8):
+    summary = []
+
+    for item in rag_sources:
+        metadata = item.get("metadata", {})
+        summary.append({
+            "type": "local_rag",
+            "title": metadata.get("filename") or metadata.get("source", "本地知识库资料"),
+            "url": "",
+            "source": metadata.get("source", ""),
+            "score": item.get("score", 0),
+            "score_reasons": item.get("score_reasons", []),
+        })
+
+    for item in online_sources:
+        summary.append({
+            "type": "online",
+            "title": item.get("title", ""),
+            "url": item.get("url", ""),
+            "source": item.get("source", ""),
+            "score": item.get("score", 0),
+            "score_reasons": item.get("score_reasons", []),
+        })
+
+    summary.sort(key=lambda item: item.get("score", 0), reverse=True)
+    return summary[:limit]
+
+
+def build_retrieval_quality(rag_sources, online_sources, selected_pois):
+    high_score_sources = [
+        item for item in [*rag_sources, *online_sources]
+        if item.get("score", 0) >= 50
+    ]
+    has_dynamic_info = any(
+        any(keyword in " ".join(item.get("score_reasons", [])) for keyword in ["动态旅游信息", "新鲜度", "公告"])
+        for item in online_sources
+    )
+
+    return {
+        "local_source_count": len(rag_sources),
+        "online_source_count": len(online_sources),
+        "high_score_source_count": len(high_score_sources),
+        "selected_poi_count": len(selected_pois),
+        "has_dynamic_info": has_dynamic_info,
+        "freshness_note": (
+            "已优先检索近两年、官方、公告、门票和开放时间相关资料。"
+            if online_sources
+            else "未命中联网资料，动态信息需要出行前再次确认。"
+        ),
+    }
+
+
 def retrieve_online_travel_info(destination: str, selected_pois, max_pois: int = 3):
     online_results = []
 
@@ -158,6 +241,10 @@ def retrieve_online_travel_info(destination: str, selected_pois, max_pois: int =
     for poi in selected_pois[:max_pois]:
         search_queries.append(build_recent_travel_query(destination, poi))
 
+    query_poi_map = {build_recent_travel_query(destination): ""}
+    for poi in selected_pois[:max_pois]:
+        query_poi_map[build_recent_travel_query(destination, poi)] = poi
+
     for query in search_queries:
         try:
             results = search_recent_travel_web(query, limit=3)
@@ -165,11 +252,17 @@ def retrieve_online_travel_info(destination: str, selected_pois, max_pois: int =
             print(f"联网检索失败：{query}，错误：{exc}")
             continue
 
-        for result in results:
+        ranked_results = rank_search_results(
+            results,
+            destination=destination,
+            poi=query_poi_map.get(query, ""),
+        )
+
+        for result in ranked_results:
             if result.get("url") not in {item.get("url") for item in online_results}:
                 online_results.append(result)
 
-    return online_results
+    return sorted(online_results, key=lambda item: item.get("score", 0), reverse=True)
 
 
 def retrieval_agent(state: TravelState) -> TravelState:
@@ -204,7 +297,10 @@ def retrieval_agent(state: TravelState) -> TravelState:
         f"强度：{travel_intensity}"
     )
 
-    rag_results = retrieve_travel_info(rag_query, k=6)
+    rag_results = score_local_rag_results(
+        retrieve_travel_info(rag_query, k=6),
+        destination=destination,
+    )
     local_rag_context = format_rag_results(rag_results)
 
     online_sources = retrieve_online_travel_info(destination, selected_pois)
@@ -221,6 +317,8 @@ def retrieval_agent(state: TravelState) -> TravelState:
         build_poi_info(poi, rag_results)
         for poi in selected_pois
     ]
+    source_summary = build_source_summary(rag_results, online_sources)
+    retrieval_quality = build_retrieval_quality(rag_results, online_sources, selected_pois)
 
     return {
         **state,
@@ -229,5 +327,7 @@ def retrieval_agent(state: TravelState) -> TravelState:
         "retrieved_info": retrieved_info,
         "rag_context": rag_context,
         "rag_sources": rag_results,
-        "online_sources": online_sources
+        "online_sources": online_sources,
+        "source_summary": source_summary,
+        "retrieval_quality": retrieval_quality
     }

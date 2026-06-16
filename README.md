@@ -8,6 +8,7 @@
 - LangGraph / 顺序调度双编排模式与阶段进度展示
 - DeepSeek/OpenAI-compatible LLM 调用
 - 本地 RAG + 近两年联网资料检索
+- Hybrid RAG 资料来源评分：官方/权威来源、近两年信息、开放时间/门票/预约等动态信息加权
 - Gemini Embedding 不可用时自动降级为本地关键词检索
 - 高德地图 POI 定位和路线估算
 - 景点图片搜索：Wikimedia Commons / DuckDuckGo / Bing
@@ -36,6 +37,7 @@ Streamlit 侧边栏可切换：
 
 - `Requirement Agent`：解析目的地、天数、预算、偏好、强度等信息
 - `Retrieval Agent`：本地 RAG、联网检索、景点开放/门票属性补充
+- `Retrieval Agent`：本地 RAG、联网检索、景点开放/门票属性补充、资料来源评分与新鲜度提示
 - `Route Agent`：景点分天、路线顺序、地图信息补充
 - `Time Agent`：生成每日时间表
 - `Image Agent`：搜索景点图片

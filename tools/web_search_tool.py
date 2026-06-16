@@ -17,6 +17,21 @@ DEFAULT_HEADERS = {
     )
 }
 
+OFFICIAL_DOMAIN_KEYWORDS = [
+    "gov.cn",
+    ".gov.",
+    "mct.gov",
+    "ctnews.com.cn",
+    "museum",
+    "amap.com",
+    "ctrip.com",
+    "mafengwo.cn",
+    "trip.com",
+]
+
+FRESHNESS_KEYWORDS = ["2026", "2025", "最新", "公告", "通知", "开放", "恢复", "预约"]
+TRAVEL_FACT_KEYWORDS = ["开放时间", "门票", "票价", "预约", "公告", "营业时间", "入园", "交通"]
+
 
 def clean_text(text: str) -> str:
     if not text:
@@ -55,6 +70,53 @@ def build_recent_travel_query(destination: str, poi: str = "") -> str:
         "2026",
     ]
     return " ".join([part for part in parts if part])
+
+
+def score_search_result(item: Dict[str, Any], destination: str = "", poi: str = "") -> Dict[str, Any]:
+    title = item.get("title", "")
+    snippet = item.get("snippet", "")
+    url = item.get("url", "")
+    query = item.get("query", "")
+    text = f"{title} {snippet} {query}"
+    lowered_url = url.lower()
+
+    score = 20
+    reasons = []
+
+    if any(keyword in lowered_url for keyword in OFFICIAL_DOMAIN_KEYWORDS):
+        score += 20
+        reasons.append("官方/权威域名")
+
+    if any(keyword in text for keyword in FRESHNESS_KEYWORDS):
+        score += 18
+        reasons.append("包含近两年或公告类新鲜度信号")
+
+    matched_fact_keywords = [keyword for keyword in TRAVEL_FACT_KEYWORDS if keyword in text]
+    if matched_fact_keywords:
+        score += min(24, len(matched_fact_keywords) * 8)
+        reasons.append("包含动态旅游信息：" + "、".join(matched_fact_keywords[:3]))
+
+    if destination and destination in text:
+        score += 12
+        reasons.append("匹配目的地")
+
+    if poi and poi in text:
+        score += 16
+        reasons.append("匹配景点名称")
+
+    return {
+        **item,
+        "score": score,
+        "score_reasons": reasons or ["普通旅游资料"],
+    }
+
+
+def rank_search_results(results: List[Dict[str, Any]], destination: str = "", poi: str = "") -> List[Dict[str, Any]]:
+    scored_results = [
+        score_search_result(item, destination=destination, poi=poi)
+        for item in results
+    ]
+    return sorted(scored_results, key=lambda item: item.get("score", 0), reverse=True)
 
 
 def extract_bing_results(html: str, query: str, limit: int) -> List[Dict[str, Any]]:
@@ -183,6 +245,8 @@ def format_online_results(results: List[Dict[str, Any]]) -> str:
             f"【在线资料{index}】\n"
             f"标题：{item.get('title', '')}\n"
             f"链接：{item.get('url', '')}\n"
+            f"评分：{item.get('score', '未评分')}\n"
+            f"评分理由：{'、'.join(item.get('score_reasons', []))}\n"
             f"摘要：{item.get('snippet', '')}\n"
             f"搜索词：{item.get('query', '')}"
         )
