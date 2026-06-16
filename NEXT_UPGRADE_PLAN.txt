@@ -1,0 +1,361 @@
+旅游规划 Multi-Agent 项目后续升级方向与技术栈建议
+================================================
+
+一、当前项目定位
+----------------
+
+当前项目已经从一个基础旅游规划 Demo 升级为：
+
+1. Streamlit 前端交互系统
+2. 多 Agent 协作式旅游规划系统
+3. DeepSeek / OpenAI-compatible LLM 调用
+4. 本地 RAG + 近两年联网资料检索
+5. 高德地图 POI / 路线估算
+6. 景点图片联网检索与缓存
+7. SQLite 历史行程保存
+8. 预算估算 Agent
+9. Validator 复核 Agent
+10. LangGraph / 顺序调度双编排模式
+
+项目已经具备课程展示、简历项目、面试讲解的基础，但如果想更像“可找工作的 AI Agent 项目”，建议继续往工程化、可观测、可评测、可部署方向升级。
+
+
+二、推荐总目标
+--------------
+
+把项目升级为：
+
+“基于 LangGraph 的多 Agent 智能旅游规划平台，集成 Hybrid RAG、联网搜索、地图工具调用、图片检索、预算估算、结果复核、状态追踪、历史记忆与可观测评测能力。”
+
+这句话可以作为简历项目名称或项目描述核心。
+
+
+三、下一阶段优先升级方向
+------------------------
+
+优先级 1：LangGraph 深度化
+
+当前已经接入 LangGraph，但只是线性流程。下一步应该把它升级为真正的图式 Agent 工作流。
+
+建议实现：
+
+1. 条件分支
+   - 如果需求解析不完整，进入 clarification_node，让系统追问用户。
+   - 如果 RAG 资料不足，进入 web_search_retry_node，扩大搜索范围。
+   - 如果路线过密，返回 route_agent 重新规划。
+   - 如果 Validator 评分过低，自动进入 revise_guide_node 修正攻略。
+
+2. 状态字段扩展
+   - add graph_trace
+   - add confidence_score
+   - add missing_requirements
+   - add validation_passed
+   - add retry_count
+
+3. 节点级事件日志
+   - 记录每个 Agent 的输入摘要、输出摘要、耗时、是否成功。
+   - 前端展示“Agent 执行轨迹”。
+
+推荐技术栈：
+
+1. LangGraph
+2. TypedDict / Pydantic
+3. Python logging
+4. Streamlit status / expander
+
+
+优先级 2：Hybrid RAG 强化
+
+当前 RAG 已有本地 txt 和联网搜索，但还可以继续增强为更完整的检索系统。
+
+建议实现：
+
+1. 多路检索
+   - 本地知识库检索
+   - 联网搜索
+   - 官方来源优先检索
+   - 景点门票 / 开放时间专项检索
+
+2. 检索结果打分
+   - 官方网站权重更高
+   - 近两年内容权重更高
+   - 标题和景点名称匹配度更高
+   - 含“开放时间、门票、预约、公告”的内容权重更高
+
+3. 引用来源展示
+   - 最终攻略中增加“资料来源”模块。
+   - 标注哪些信息来自联网资料，哪些来自本地知识库。
+
+4. 数据新鲜度说明
+   - 对门票、开放时间、预约规则等动态信息，提示“建议出行前再次确认官方公告”。
+
+推荐技术栈：
+
+1. LangChain Retriever
+2. BM25 / keyword search
+3. Chroma / FAISS
+4. DuckDuckGo / Bing Search
+5. BeautifulSoup
+6. SQLite cache
+
+
+优先级 3：Agent 记忆与用户画像
+
+当前系统每次规划是独立的。后续可以升级为有记忆的旅行助手。
+
+建议实现：
+
+1. 用户偏好记忆
+   - 喜欢美食 / 历史 / 夜景 / 轻松行程
+   - 不喜欢太累 / 不喜欢购物 / 不想排队
+   - 常用预算档位
+
+2. 历史行程复用
+   - 用户下次输入“还是按我上次风格”，系统能读取历史偏好。
+   - 支持“基于上次重庆两日游，改成三日游”。
+
+3. 记忆可编辑
+   - 前端显示已识别偏好。
+   - 用户可以删除或修改记忆。
+
+推荐技术栈：
+
+1. SQLite
+2. Pydantic model
+3. LangGraph state
+4. Streamlit sidebar
+5. 简单向量记忆可选：Chroma
+
+
+优先级 4：结果评测与质量保障
+
+如果用于找工作，这一点很加分。很多 Demo 只会生成内容，但没有评测体系。
+
+建议实现：
+
+1. 构建测试问题集
+   - 成都三日美食游
+   - 重庆两日夜景游
+   - 西安四日历史游
+   - 北京亲子三日游
+   - 上海低预算两日游
+
+2. 自动评测指标
+   - 是否识别目的地
+   - 是否识别天数
+   - 是否包含每日路线
+   - 是否包含开放时间 / 门票信息
+   - 是否包含预算
+   - 是否给出风险提示
+   - 是否引用资料来源
+
+3. 输出评测报告
+   - 每条样例得分
+   - 总体平均分
+   - 失败案例
+
+推荐技术栈：
+
+1. pytest
+2. json fixtures
+3. 自定义 evaluator
+4. LangSmith 可选
+5. pandas 报告导出
+
+
+优先级 5：后端 API 化
+
+当前是 Streamlit 单体应用。为了更像真实项目，可以拆出后端 API。
+
+建议实现：
+
+1. FastAPI 后端
+   - POST /plan：提交旅游需求
+   - GET /plans：查询历史行程
+   - GET /plans/{id}：查看行程详情
+   - POST /plans/{id}/revise：基于历史行程修改
+
+2. 流式接口
+   - 使用 Server-Sent Events 输出 Agent 执行阶段。
+   - 前端实时展示“需求解析中、资料检索中、路线规划中”等。
+
+3. Streamlit 只作为前端
+   - Streamlit 调用 FastAPI。
+   - 后续也可以换成 Vue / React。
+
+推荐技术栈：
+
+1. FastAPI
+2. Uvicorn
+3. SSE / StreamingResponse
+4. Pydantic
+5. SQLite / SQLAlchemy
+6. Streamlit 或 React
+
+
+优先级 6：观测与日志系统
+
+Agent 系统很容易出现慢、贵、错的问题，所以可观测能力很重要。
+
+建议实现：
+
+1. 每个节点记录耗时
+2. 每个节点记录 token 消耗，如果模型接口可返回 usage
+3. 每次联网搜索记录 query 和命中来源
+4. 每次图片搜索记录来源
+5. 前端展示本次规划总耗时
+6. 后台保存 agent_runs 表
+
+推荐技术栈：
+
+1. Python logging
+2. SQLite agent_runs table
+3. time.perf_counter
+4. LangSmith 可选
+5. Streamlit metrics
+
+
+优先级 7：部署与项目包装
+
+找工作时，项目最好能展示“我不只是写 Demo，也懂部署和工程交付”。
+
+建议实现：
+
+1. Dockerfile
+2. docker-compose.yml
+3. .env.example 完整说明
+4. README 架构图
+5. README 功能截图
+6. README 面试讲解版技术亮点
+
+推荐技术栈：
+
+1. Docker
+2. Docker Compose
+3. GitHub
+4. Mermaid 架构图
+5. Markdown 文档
+
+
+四、推荐技术栈总览
+------------------
+
+前端：
+
+1. Streamlit
+2. pydeck
+3. pandas
+
+后端：
+
+1. Python
+2. FastAPI
+3. Pydantic
+4. Uvicorn
+
+Agent 编排：
+
+1. LangGraph
+2. LangChain Tools
+3. TypedDict / Pydantic State
+
+LLM：
+
+1. DeepSeek
+2. OpenAI-compatible API
+
+RAG：
+
+1. LangChain
+2. Chroma 或 FAISS
+3. BM25 / keyword fallback
+4. Web Search
+5. BeautifulSoup
+
+工具调用：
+
+1. 高德地图 API
+2. DuckDuckGo / Bing Search
+3. Wikimedia Commons
+4. 图片搜索工具
+
+数据层：
+
+1. SQLite
+2. SQLAlchemy 可选
+3. 本地 cache table
+
+质量保障：
+
+1. pytest
+2. 自定义 evaluator
+3. LangSmith 可选
+
+部署：
+
+1. Docker
+2. Docker Compose
+3. .env 配置管理
+
+
+五、下个窗口建议从哪里继续
+--------------------------
+
+建议下个窗口从“LangGraph 深度化”继续。
+
+可以直接对新窗口里的 Codex 说：
+
+“请先阅读 NEXT_UPGRADE_PLAN.txt 和当前项目代码，然后从优先级 1 开始，把 LangGraph 从线性流程升级为带条件分支、重试、节点日志的图工作流。不要启动本地服务，涉及安装依赖或联网操作先问我。”
+
+
+六、下个窗口第一阶段具体任务
+----------------------------
+
+建议第一阶段做这几件事：
+
+1. 扩展 TravelState
+   - graph_trace
+   - validation_passed
+   - confidence_score
+   - retry_count
+   - missing_requirements
+
+2. 增加 graph/router.py
+   - route_after_requirement
+   - route_after_retrieval
+   - route_after_validation
+
+3. 增加 clarification_node
+   - 当目的地或天数缺失时，不继续生成攻略，而是生成追问文本。
+
+4. 增加 revise_node
+   - 当 Validator 综合评分偏低时，调用 Guide Writer 进行一次修正。
+
+5. 增加 graph_trace 记录
+   - 每个节点进入和完成都记录。
+   - 前端展示 Agent 执行轨迹。
+
+6. 保留顺序调度
+   - 不要删除原 supervisor_agent_stream。
+   - LangGraph 作为增强模式，顺序调度作为兼容模式。
+
+
+七、简历描述建议
+----------------
+
+项目名称：
+
+基于 LangGraph 的多 Agent 智能旅游规划系统
+
+项目描述：
+
+设计并实现一个面向自然语言旅行需求的多 Agent 旅游规划系统，基于 LangGraph 构建 Agent 工作流，结合 Hybrid RAG、联网搜索、地图 API、图片检索、预算估算与结果复核，实现从用户需求解析到完整旅行攻略生成的端到端流程。
+
+技术亮点：
+
+1. 使用 LangGraph 构建多 Agent 图式编排，支持阶段流式反馈和后续条件分支扩展。
+2. 构建 Hybrid RAG 检索体系，结合本地知识库、联网搜索和缓存机制，提高景点开放时间、门票、预约等动态信息的新鲜度。
+3. 集成高德地图 API，完成 POI 定位、路线估算和地图可视化。
+4. 设计 Validator Agent，对行程密度、信息完整性、预算合理性和资料可信度进行结构化复核。
+5. 使用 SQLite 保存历史行程、缓存搜索结果，并支持用户对行程进行二次编辑和局部重新规划。
+
